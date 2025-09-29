@@ -1,0 +1,31 @@
+﻿# Node and frontend artifacts
+node_modules/
+dist/
+.npmrc
+
+# Environment files
+.env
+.env.*
+*/.env
+*/.env.*
+
+# Logs and coverage
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+coverage/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate
+terraform.tfstate.*
+crash.log
+
+# Docker
+**/tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
