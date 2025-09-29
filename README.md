@@ -16,7 +16,20 @@ La arquitectura final replica el diagrama propuesto: usuarios ingresan por Route
 
 ---
 
-## 2. Variables de entorno locales
+## 2. Estructura del repositorio
+
+```bash
+IaaC_Project_AWS/
+├─ infra/              # Terraform
+├─ tienda-backend/     # API Express
+├─ tienda-frontend/    # SPA React + Nginx
+├─ docker-compose.yml
+└─ README.md
+```
+
+---
+
+## 3. Variables de entorno locales
 
 Plantillas incluidas:
 
@@ -27,7 +40,7 @@ Copia cada archivo a ```.env``` y adapta los valores sensibles antes de ejecutar
 
 ---
 
-## 3. Desarrollo local
+## 4. Desarrollo local
 
 ### Backend
 
@@ -53,7 +66,7 @@ Vite expone la SPA en ```http://localhost:5173``` y reenvia ```/api``` al backen
 
 ---
 
-## 4. Docker Compose
+## 5. Docker Compose
 
 ```bash
 docker-compose up --build
@@ -63,7 +76,7 @@ Servicios incluidos: backend (3000), frontend (80) y MySQL 8 (3306, con volumen 
 
 ---
 
-## 5. Construccion y publicacion de imagenes
+## 6. Construccion y publicacion de imagenes
 
 ```bash
 # Backend
@@ -85,9 +98,16 @@ docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/tienda-frontend:latest
 
 ---
 
-## 6. Despliegue con Terraform
+## 7. Despliegue con Terraform
 
-1. Ejecuta Terraform:
+1. Clonar el repositorio:
+
+```bash
+git clone https://github.com/AndreToral/IaaC_Project_AWS.git
+cd IaaC_Project_AWS
+```
+
+2. Ejecuta Terraform:
 
    ```bash
    cd infra
@@ -96,7 +116,7 @@ docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/tienda-frontend:latest
    terraform apply
    ```
 
-2. Recursos principales creados:
+3. Recursos principales creados:
 
    - **Red**: VPC con subredes publicas y privadas en dos AZ, NAT Gateway e Internet Gateway.
    - **Borde**: CloudFront distribuye el trafico global, protegido por AWS WAF (scope CLOUDFRONT) y apuntando al ALB.
@@ -106,7 +126,7 @@ docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/tienda-frontend:latest
    - **DNS**: Route53 Hosted Zone con alias del dominio raiz hacia CloudFront.
    - **Repos**: ECR para backend y frontend.
 
-3. Revisa los outputs para obtener dominios del ALB, CloudFront, endpoints de RDS/Redis y nombres de servicios ECS.
+4. Revisa los outputs para obtener dominios del ALB, CloudFront, endpoints de RDS/Redis y nombres de servicios ECS.
 
 ```bash
 terraform output
@@ -114,24 +134,12 @@ terraform output
 
 ---
 
-## 7. Operacion y buenas practicas
+## 8. Operacion y buenas practicas
 
 - Mantener secretos en Secrets Manager; las tareas ECS obtienen ```DB_PASSWORD``` directamente mediante permisos de IAM.
 - Configura CloudWatch dashboards/alarms adicionales segun tus SLA (los logs se almacenan en ```/ecs/tienda-*```).
 - Usa GitHub Actions con OIDC o CodeDeploy para CI/CD continuo, tal como ilustra el diagrama.
 - Asegura la rotacion de certificados y credenciales antes de la caducidad.
-
----
-
-## 8. Estructura del repositorio
-
-```bash
-├─ infra/              # Terraform
-├─ tienda-backend/     # API Express
-├─ tienda-frontend/    # SPA React + Nginx
-├─ docker-compose.yml
-└─ README.md
-```
 
 ---
 
