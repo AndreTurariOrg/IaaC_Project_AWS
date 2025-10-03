@@ -15,7 +15,6 @@ resource "aws_iam_role_policy_attachment" "backup" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup"
 }
 
-# RDS MySQL instance
 resource "aws_db_subnet_group" "tienda" {
   name       = "tienda-db-subnet-group"
   subnet_ids = aws_subnet.private[*].id
@@ -33,7 +32,7 @@ resource "aws_db_instance" "tienda" {
   publicly_accessible    = false
   vpc_security_group_ids = [aws_security_group.db.id]
   db_subnet_group_name   = aws_db_subnet_group.tienda.name
-  multi_az               = true
+  multi_az               = false
   storage_encrypted      = true
   backup_retention_period = 7
 }
