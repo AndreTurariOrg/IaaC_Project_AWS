@@ -1,149 +1,211 @@
-﻿# Tienda - Backend, Frontend y Despliegue en AWS
+﻿# Tienda - Guia Completa de Despliegue
 
-Este proyecto agrupa un backend Node.js/Express, un frontend React servido por Nginx y la infraestructura como codigo con Terraform para ejecutar la solucion en AWS sobre ECS Fargate.
+Este repositorio contiene tres piezas principales:
 
-La arquitectura final replica el diagrama propuesto: usuarios ingresan por Route53 -> CloudFront (protegido por WAF) -> ALB -> ECS en subredes privadas; la persistencia se maneja con RDS Multi-AZ y AWS Backup.
+- **Backend**: API REST en Node.js/Express (`tienda-backend`).
+- **Frontend**: SPA en React servida por Nginx (`tienda-frontend`).
+- **Infraestructura**: Terraform para aprovisionar la solucion en AWS (`infra`).
 
----
-
-## 1. Requisitos previos
-
-- Docker y Docker Compose
-- Node.js 18+ y npm (para desarrollo local)
-- Terraform 1.3+ y AWS CLI configurado (```aws configure```)
-- Cuenta de AWS con permisos para VPC, ECS, RDS, ALB, CloudFront, WAF, Route53, Secrets Manager, IAM y CloudWatch
-- Dos certificados ACM en ```us-east-1```: uno para el ALB y otro (puede ser el mismo) para CloudFront
+La arquitectura objetivo es: usuarios -> Route53 -> CloudFront (con WAF) -> ALB -> tareas ECS Fargate en subredes privadas. Los datos residen en RDS MySQL y se respaldan con AWS Backup.
 
 ---
 
-## 2. Estructura del repositorio
+## 1. Herramientas necesarias
+
+Instala y verifica estas utilidades en tu maquina local:
+
+| Herramienta | Version sugerida | Comando de verificacion |
+|-------------|------------------|-------------------------|
+| Git         | 2.30+            | `git --version` |
+| Node.js     | 18+              | `node --version` |
+| npm         | 8+               | `npm --version` |
+| Docker      | 20+              | `docker --version` |
+| Terraform   | 1.3+             | `terraform version` |
+| AWS CLI v2  | 2.7+             | `aws --version` |
+| Ansible     | 2.14+            | `ansible --version` |
+
+1. Configura el AWS CLI con credenciales validas: `aws configure`.
+2. Si estas en Windows, usa WSL2 para facilitar Docker/Ansible o ejecuta todo desde una instancia Linux.
+3. En Docker Desktop, activa la integracion con WSL2 si corresponde.
+
+---
+
+## 2. Clonar el repositorio y revisar la estructura
 
 ```bash
-IaaC_Project_AWS/
-├─ infra/              # Terraform
+git clone https://github.com/AndreTurariOrg/IaaC_Project_AWS.git
+cd IaaC_Project_AWS/infra
+```
+
+Estructura relevante:
+
+```
+.
+├─ infra/              # Terraform (VPC, ALB, ECS, RDS, etc.)
 ├─ tienda-backend/     # API Express
 ├─ tienda-frontend/    # SPA React + Nginx
-├─ docker-compose.yml
-└─ README.md
+├─ ansible/            # Playbooks para ECR
+├─ docker-compose.yml  # Entorno local con Docker Compose
+└─ README.md           # Esta guia
 ```
 
 ---
 
-## 3. Variables de entorno locales
+## 3. Configurar variables de entorno locales
 
-Plantillas incluidas:
+Cada aplicacion incluye un `.env.example`.
 
-- ```tienda-backend/.env.example```
-- ```tienda-frontend/.env.example```
+```bash
+cp tienda-backend/.env.example tienda-backend/.env
+cp tienda-frontend/.env.example tienda-frontend/.env
+```
 
-Copia cada archivo a ```.env``` y adapta los valores sensibles antes de ejecutar ```npm run dev``` o ```docker-compose```.
+Edita los archivos `.env` segun necesites (credenciales, URLs, etc.).
 
 ---
 
-## 4. Desarrollo local
+## 4. Probar el backend y frontend en modo desarrollo
 
 ### Backend
 
 ```bash
 cd tienda-backend
-cp .env.example .env
 npm install
-npm run dev   # usa nodemon o tu herramienta preferida
+npm run dev
 ```
 
-El API queda en ```http://localhost:3000```.
+El API queda en `http://localhost:3000`.
 
 ### Frontend
 
 ```bash
 cd tienda-frontend
-cp .env.example .env
 npm install
 npm run dev
 ```
 
-Vite expone la SPA en ```http://localhost:5173``` y reenvia ```/api``` al backend (puerto 3000) via proxy declarado en ```vite.config.js```.
+La SPA se expone en `http://localhost:5173` y reenvia `/api` al backend.
 
 ---
 
-## 5. Docker Compose
+## 5. Ejecutar todo con Docker Compose (opcional)
 
 ```bash
 docker-compose up --build
 ```
 
-Servicios incluidos: backend (3000), frontend (80) y MySQL 8 (3306, con volumen ```db_data```). Ajusta credenciales mediante variables definidas en ```docker-compose.yml``` o archivos ```.env```.
+Servicios levantados:
+
+- Backend: `http://localhost:3000`
+- Frontend: `http://localhost`
+- MySQL 8: puerto `3306`, credenciales definidas en `docker-compose.yml`
+
+Para detener: `docker-compose down` (agrega `-v` si quieres borrar volumenes).
 
 ---
 
-## 6. Construccion y publicacion de imagenes
+## 6. Preparar imagenes Docker para produccion
+
+### 6.1 Construir imagenes manualmente (referencia rapida)
 
 ```bash
-# Backend
-docker build -t tienda-backend ./tienda-backend
-
-# Frontend (puedes sobrescribir la URL del API con --build-arg VITE_API_BASE_URL)
-docker build -t tienda-frontend ./tienda-frontend
+docker build -t tienda-backend:latest ./tienda-backend
+docker build -t tienda-frontend:latest ./tienda-frontend
 ```
 
-Publica en ECR antes del despliegue:
+### 6.2 Publicar en ECR automaticamente con Ansible
 
-```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
-docker tag tienda-backend:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/tienda-backend:latest
-docker tag tienda-frontend:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/tienda-frontend:latest
-docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/tienda-backend:latest
-docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/tienda-frontend:latest
-```
-
----
-
-## 7. Despliegue con Terraform
-
-1. Clonar el repositorio:
-
-```bash
-git clone https://github.com/AndreToral/IaaC_Project_AWS.git
-cd IaaC_Project_AWS
-```
-
-2. Ejecuta Terraform:
-
+1. Instala las colecciones necesarias:
    ```bash
-   cd infra
-   terraform init
-   terraform plan
-   terraform apply
+   ansible-galaxy collection install community.docker community.general
+   ```
+2. Edita `ansible/group_vars/all.yml` y actualiza:
+   - `aws_region`: region del registro ECR.
+   - `aws_account_id`: ID de 12 digitos de tu cuenta.
+   - `backend_ecr_repo` / `frontend_ecr_repo`: repositorios existentes en ECR.
+   - `image_tag`: etiqueta que se publicara (ej. `latest` o un SHA).
+   - `backend_build_context` / `frontend_build_context`: rutas al contexto de build.
+   - `frontend_build_args`: argumentos opcionales (puedes vaciar el diccionario si no aplican).
+3. Asegurate de que Docker este corriendo en tu maquina (o en el host definido en `ansible/inventory.ini`). Por defecto el inventario usa `localhost`.
+4. Exporta tus credenciales si no usas un perfil:
+   ```bash
+   export AWS_ACCESS_KEY_ID=...
+   export AWS_SECRET_ACCESS_KEY=...
+   export AWS_SESSION_TOKEN=... # opcional
+   ```
+   O bien, define `AWS_PROFILE=mi-perfil` antes de ejecutar el playbook.
+5. Ejecuta el playbook:
+   ```bash
+   ansible-playbook -i ansible/inventory.ini ansible/push_ecr.yml
    ```
 
-3. Recursos principales creados:
+El playbook ejecuta `docker info`, obtiene el token de login con `aws ecr get-login-password`, construye las imagenes de backend y frontend, y las etiqueta/push a `ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/<repo>:<tag>`.
 
-   - **Red**: VPC con subredes publicas y privadas en dos AZ, NAT Gateway e Internet Gateway.
-   - **Borde**: CloudFront distribuye el trafico global, protegido por AWS WAF (scope CLOUDFRONT) y apuntando al ALB.
-   - **Balanceo**: ALB con listeners HTTP->HTTPS y prioridad ```/api/*``` hacia el backend.
-   - **Compute**: ECS Fargate (2 replicas por servicio) con logs en CloudWatch y acceso controlado via IAM roles (execution + task role con permisos para Secrets Manager).
-   - **Datos**: RDS MySQL Multi-AZ (standby sincronizada), backups gestionados por AWS Backup, y Secrets Manager para credenciales rotables.
-   - **DNS**: Route53 Hosted Zone con alias del dominio raiz hacia CloudFront.
-   - **Repos**: ECR para backend y frontend.
-
-4. Revisa los outputs para obtener dominios del ALB, CloudFront, endpoints de RDS/Redis y nombres de servicios ECS.
-
+Para usar otro tag dinamico:
 ```bash
-terraform output
+ansible-playbook -i ansible/inventory.ini ansible/push_ecr.yml -e image_tag=$(git rev-parse --short HEAD)
 ```
 
 ---
 
-## 8. Operacion y buenas practicas
+## 7. Aprovisionar infraestructura en AWS con Terraform
 
-- Mantener secretos en Secrets Manager; las tareas ECS obtienen ```DB_PASSWORD``` directamente mediante permisos de IAM.
-- Configura CloudWatch dashboards/alarms adicionales segun tus SLA (los logs se almacenan en ```/ecs/tienda-*```).
-- Usa GitHub Actions con OIDC o CodeDeploy para CI/CD continuo, tal como ilustra el diagrama.
-- Asegura la rotacion de certificados y credenciales antes de la caducidad.
+1. Ubicate en la carpeta `infra/`:
+   ```bash
+   cd infra
+   ```
+2. Inicializa y revisa el plan:
+   ```bash
+   terraform init
+   terraform plan
+   ```
+   Pasa variables si las necesitas (por ejemplo, IDs de certificados ACM).
+3. Aplica los cambios:
+   ```bash
+   terraform apply
+   ```
+   Confirma con `yes` cuando se muestre el plan.
+4. Al terminar, revisa los outputs para obtener endpoints utiles (ALB, CloudFront, RDS, etc.):
+   ```bash
+   terraform output
+   ```
+
+> **Nota**: Terraform crea VPC, subredes publicas/privadas, NAT, ALB, ECS Fargate, RDS MySQL, Secrets Manager, CloudFront, WAF y Route53. Verifica que los repositorios ECR tengan las imagenes con el tag esperado antes de levantar las tareas ECS.
+
+Para destruir la infraestructura (con cuidado): `terraform destroy`.
 
 ---
 
-## 9. Soporte
+## 8. Cargar datos en RDS (opcional)
 
-Reporta incidencias o nuevas funcionalidades mediante issues o pull requests en tu repositorio remoto.
+El RDS se crea en subredes privadas. Para administrar la base:
 
+1. Usa un bastion o instancia en la VPC, o crea un tunel SSH/SSM que tenga acceso al security group del RDS.
+2. Desde ese host ejecuta el cliente MySQL:
+   ```bash
+   mysql -h <endpoint-rds> -P 3306 -u tiendauser -p
+   ```
+   La contrasena inicial se define en `infra/database.tf` (`tiendapass`, cambiala si ya la rotaste).
+3. Crea la base y ejecuta tus scripts (`SOURCE /ruta/script.sql;`).
+
+Puedes automatizar la importacion con Ansible creando tareas que usen `community.mysql` desde un host dentro de la VPC.
+
+---
+
+## 9. Verificacion posterior al despliegue
+
+1. **ECS**: revisa que las tareas de frontend y backend esten `RUNNING` y usando la imagen/tag correctos.
+2. **ALB/CloudFront**: accede al dominio mostrado en los outputs de Terraform. Deberias ver la SPA funcionando.
+3. **Logs**: revisa CloudWatch Logs (`/ecs/tienda-backend`, `/ecs/tienda-frontend`).
+4. **Base de datos**: verifica conexiones en CloudWatch Metrics y ejecuta consultas de prueba.
+
+---
+
+## 10. Buenas practicas y siguientes pasos
+
+- Guarda secretos en AWS Secrets Manager y rota credenciales periodicamente.
+- Configura alarmas en CloudWatch (CPU/memoria de ECS, conexiones de RDS, estado del ALB).
+- Automatiza pruebas y despliegues con un pipeline (GitHub Actions, CodePipeline, etc.) que invoque este playbook y Terraform.
+- Antes de destruir recursos productivos, confirma snapshots/backups y dependencias DNS/certificados.
+
+Con esta guia puedes pasar de un clon del repositorio a un despliegue funcional en AWS siguiendo los pasos en orden y validando cada etapa.
