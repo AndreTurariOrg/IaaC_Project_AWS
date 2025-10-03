@@ -1,0 +1,60 @@
+---
+- name: Build and push Docker images to ECR
+  hosts: builder
+  vars:
+    ecr_registry: "{{ aws_account_id }}.dkr.ecr.{{ aws_region }}.amazonaws.com"
+    backend_ecr_uri: "{{ ecr_registry }}/{{ backend_ecr_repo }}"
+    frontend_ecr_uri: "{{ ecr_registry }}/{{ frontend_ecr_repo }}"
+  tasks:
+    - name: Comprobar que Docker está disponible
+      ansible.builtin.command: docker info
+      register: docker_info
+      changed_when: false
+
+    - name: Obtener token de autenticación para ECR
+      ansible.builtin.command: >-
+        aws ecr get-login-password --region {{ aws_region }}
+      register: ecr_login
+      changed_when: false
+      no_log: true
+
+    - name: Iniciar sesión en el registro ECR
+      community.general.docker_login:
+        registry_url: "{{ ecr_registry }}"
+        username: AWS
+        password: "{{ ecr_login.stdout }}"
+
+    - name: Construir imagen backend
+      community.docker.docker_image:
+        name: "{{ backend_image_local }}"
+        tag: "{{ image_tag }}"
+        build:
+          path: "{{ (playbook_dir, backend_build_context) | path_join }}"
+        push: false
+
+    - name: Construir imagen frontend
+      community.docker.docker_image:
+        name: "{{ frontend_image_local }}"
+        tag: "{{ image_tag }}"
+        build:
+          path: "{{ (playbook_dir, frontend_build_context) | path_join }}"
+          args: "{{ frontend_build_args | default({}) }}"
+        push: false
+
+    - name: Etiquetar y subir imagen backend a ECR
+      community.docker.docker_image:
+        name: "{{ backend_image_local }}"
+        repository: "{{ backend_ecr_uri }}"
+        tag: "{{ image_tag }}"
+        push: true
+        source: local
+        force_tag: true
+
+    - name: Etiquetar y subir imagen frontend a ECR
+      community.docker.docker_image:
+        name: "{{ frontend_image_local }}"
+        repository: "{{ frontend_ecr_uri }}"
+        tag: "{{ image_tag }}"
+        push: true
+        source: local
+        force_tag: true

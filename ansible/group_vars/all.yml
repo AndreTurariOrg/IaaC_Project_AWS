@@ -1,0 +1,25 @@
+---
+# Región donde vive tu registro ECR
+aws_region: us-east-1
+
+# ID de la cuenta que aloja los repositorios ECR
+aws_account_id: "123456789012"
+
+# Nombre lógico de las imágenes locales
+backend_image_local: tienda-backend
+frontend_image_local: tienda-frontend
+
+# Nombre del repositorio en ECR (sin incluir la URI completa)
+backend_ecr_repo: tienda-backend
+frontend_ecr_repo: tienda-frontend
+
+# Tag que se usará en ECR (puedes cambiarlo por un hash de commit, etc.)
+image_tag: latest
+
+# Directorios de build (relativos al root del repo)
+backend_build_context: ../tienda-backend
+frontend_build_context: ../tienda-frontend
+
+# Build args opcionales para el frontend (deja vacío si no aplican)
+frontend_build_args:
+  VITE_API_BASE_URL: /api
