@@ -42,6 +42,19 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_role" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy" "ecs_execution_secrets" {
+  name   = "tienda-ecs-execution-secrets"
+  role   = aws_iam_role.ecs_task_execution_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = [aws_secretsmanager_secret.db.arn, aws_secretsmanager_secret_version.db.arn]
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "ecs_task_secrets" {
   name = "tienda-ecs-task-secrets"
   role = aws_iam_role.ecs_task_role.id
@@ -51,7 +64,7 @@ resource "aws_iam_role_policy" "ecs_task_secrets" {
       {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"],
-        Resource = aws_secretsmanager_secret.db.arn
+        Resource = [aws_secretsmanager_secret.db.arn, aws_secretsmanager_secret_version.db.arn]
       }
     ]
   })
@@ -155,7 +168,7 @@ resource "aws_ecs_service" "backend" {
     container_port   = 3000
   }
 
-  depends_on = [aws_lb_listener.https]
+  depends_on = [aws_lb_listener.http]
 }
 
 resource "aws_ecs_service" "frontend" {
@@ -177,5 +190,5 @@ resource "aws_ecs_service" "frontend" {
     container_port   = 80
   }
 
-  depends_on = [aws_lb_listener.https]
+  depends_on = [aws_lb_listener.http]
 }
