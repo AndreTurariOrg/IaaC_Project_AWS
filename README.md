@@ -40,7 +40,7 @@ cd IaaC_Project_AWS/infra
 Estructura relevante:
 
 ```
-.
+IaaC_Project_AWS/
 ├─ infra/              # Terraform (VPC, ALB, ECS, RDS, etc.)
 ├─ tienda-backend/     # API Express
 ├─ tienda-frontend/    # SPA React + Nginx
